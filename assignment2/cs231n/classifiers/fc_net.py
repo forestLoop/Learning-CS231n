@@ -184,8 +184,8 @@ class FullyConnectedNet(object):
             self.params["b{0}".format(i)] = np.zeros((dims[i],), dtype=self.dtype)
         if normalization:
             for i in range(1, self.num_layers):
-                self.params["gamma{0}".format(i)] = 1
-                self.params["beta{0}".format(i)] = 0
+                self.params["gamma{0}".format(i)] = np.ones((dims[i],))
+                self.params["beta{0}".format(i)] = np.zeros((dims[i],))
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
