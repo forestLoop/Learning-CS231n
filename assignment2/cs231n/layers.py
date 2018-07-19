@@ -526,7 +526,29 @@ def conv_forward_naive(x, w, b, conv_param):
     # TODO: Implement the convolutional forward pass.                         #
     # Hint: you can use the function np.pad for padding.                      #
     ###########################################################################
-    pass
+    stride, pad = conv_param["stride"], conv_param["pad"]
+    N, C, H, W = x.shape
+    F, C, HH, WW = w.shape
+    new_H = 1 + (H + 2 * pad - HH) // stride
+    new_W = 1 + (W + 2 * pad - WW) // stride
+    out = np.zeros((N, F, new_H, new_W), dtype=x.dtype)
+    # print(out.shape)
+    for n in range(N):  # loop over every image
+        image = x[n]
+        # print(image.shape)
+        padded_image = np.pad(image, ((0, 0), (pad, pad), (pad, pad)), 'constant')
+        # print(padded_image.shape)
+        for f in range(F):  # loop over every filter
+            conv_filter = w[f]
+            # print(conv_filter.shape)
+            for i in range(0, new_H):  # loop vertically
+                view_h = stride * i
+                for j in range(0, new_W):    # loop horizontally
+                    view_w = stride * j
+                    # print(w)
+                    view = padded_image[:, view_h:view_h+HH, view_w:view_w+WW]
+                    out[n][f][i][j] = np.sum(view*conv_filter) + b[f]
+
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -551,7 +573,32 @@ def conv_backward_naive(dout, cache):
     ###########################################################################
     # TODO: Implement the convolutional backward pass.                        #
     ###########################################################################
-    pass
+    x, w, b, conv_param = cache
+    stride, pad = conv_param["stride"], conv_param["pad"]
+    N, C, H, W = x.shape
+    F, C, HH, WW = w.shape
+    new_H = 1 + (H + 2 * pad - HH) // stride
+    new_W = 1 + (W + 2 * pad - WW) // stride
+    assert dout.shape == (N, F, new_H, new_W)
+    dx = np.zeros_like(x)
+    dw = np.zeros_like(w)
+    db = np.zeros_like(b)
+    for n in range(N):  # loop over every image
+        image = x[n]
+        padded_image = np.pad(image, ((0, 0), (pad, pad), (pad, pad)), 'constant')
+        dpadded_image = np.zeros_like(padded_image)
+        # print(dpadded_image.shape)
+        for f in range(F):  # loop over every filter
+            conv_filter = w[f]
+            for i in range(0, new_H):  # loop vertically
+                view_h = stride * i
+                for j in range(0, new_W):    # loop horizontally
+                    view_w = stride * j
+                    view = padded_image[:, view_h:view_h+HH, view_w:view_w+WW]
+                    db[f] += dout[n][f][i][j]
+                    dw[f] += view * dout[n][f][i][j]
+                    dpadded_image[:, view_h:view_h+HH, view_w:view_w+WW] += dout[n][f][i][j] * conv_filter
+                    dx[n] = dpadded_image[:, pad:-pad, pad:-pad]
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -581,7 +628,20 @@ def max_pool_forward_naive(x, pool_param):
     ###########################################################################
     # TODO: Implement the max-pooling forward pass                            #
     ###########################################################################
-    pass
+    N, C, H, W = x.shape
+    pool_height, pool_width, stride = pool_param["pool_height"], pool_param["pool_width"], pool_param["stride"]
+    new_H = 1 + (H - pool_height) // stride
+    new_W = 1 + (W - pool_width) // stride
+    out = np.zeros((N, C, new_H, new_W))
+    for n in range(N):  # loop over every image
+        for c in range(C):  # loop over every channel
+            single_channel_image = x[n][c]
+            for i in range(new_H):  # loop vertically
+                view_h = i * stride
+                for j in range(new_W):  # loop horizontally
+                    view_w = j * stride
+                    view = single_channel_image[view_h:view_h+pool_height, view_w:view_w+pool_width]
+                    out[n][c][i][j] = np.max(view)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -604,7 +664,25 @@ def max_pool_backward_naive(dout, cache):
     ###########################################################################
     # TODO: Implement the max-pooling backward pass                           #
     ###########################################################################
-    pass
+    x, pool_param = cache
+    N, C, H, W = x.shape
+    pool_height, pool_width, stride = pool_param["pool_height"], pool_param["pool_width"], pool_param["stride"]
+    new_H = 1 + (H - pool_height) // stride
+    new_W = 1 + (W - pool_width) // stride
+    assert dout.shape == (N, C, new_H, new_W)
+    dx = np.zeros_like(x)
+    for n in range(N):  # loop over every image
+        for c in range(C):  # loop over every channel
+            single_channel_image = x[n][c]
+            for i in range(new_H):  # loop vertically
+                view_h = i * stride
+                for j in range(new_W):  # loop horizontally
+                    view_w = j * stride
+                    view = single_channel_image[view_h:view_h+pool_height, view_w:view_w+pool_width]
+                    max_index = np.argmax(view)
+                    max_h = view_h + max_index // pool_width    # be careful here
+                    max_w = view_w + max_index % pool_width
+                    dx[n][c][max_h][max_w] += dout[n][c][i][j]
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -791,4 +869,5 @@ def softmax_loss(x, y):
     dx = probs.copy()
     dx[np.arange(N), y] -= 1
     dx /= N
+    return loss, dx
     return loss, dx
