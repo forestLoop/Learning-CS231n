@@ -357,7 +357,11 @@ def layernorm_forward(x, gamma, beta, ln_param):
     # transformations you could perform, that would enable you to copy over   #
     # the batch norm code and leave it almost unchanged?                      #
     ###########################################################################
-    pass
+    row_mean = np.mean(x, axis=1, keepdims=True)
+    row_var = np.var(x, axis=1, keepdims=True)
+    x_normalized = (x-row_mean)/np.sqrt(row_var+eps)
+    out = x_normalized * gamma + beta
+    cache = (x, row_mean, row_var, x_normalized, gamma, beta, eps)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -388,7 +392,18 @@ def layernorm_backward(dout, cache):
     # implementation of batch normalization. The hints to the forward pass    #
     # still apply!                                                            #
     ###########################################################################
-    pass
+    N, D = dout.shape
+    x, mean, var, temp, gamma, beta, eps = cache
+
+    dbeta = np.sum(dout, axis=0)
+    dgamma = np.sum(dout*temp, axis=0)
+
+    # the following code refers to https://arxiv.org/pdf/1502.03167.pdf
+    dtemp = dout * gamma
+    dvar = np.sum(dtemp * (x-mean) * (-0.5) * (var+eps)**(-1.5), axis=1, keepdims=True)
+    dmean = np.sum(dtemp*(-1)/np.sqrt(var+eps), axis=1, keepdims=True) - 2 * dvar * np.mean(x-mean, axis=1, keepdims=True)
+    # print(dtemp.shape, dvar.shape, dmean.shape)
+    dx = dtemp * 1 / np.sqrt(var + eps) + dvar * 2 * (x-mean) / D + dmean / D
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
