@@ -283,7 +283,7 @@ def batchnorm_backward_alt(dout, cache):
 
     For this implementation you should work out the derivatives for the batch
     normalizaton backward pass on paper and simplify as much as possible. You
-    should be able to derive a simple expression for the backward pass. 
+    should be able to derive a simple expression for the backward pass.
     See the jupyter notebook for more hints.
 
     Note: This implementation should expect to receive the same cache variable
@@ -508,7 +508,7 @@ def conv_forward_naive(x, w, b, conv_param):
     - conv_param: A dictionary with the following keys:
       - 'stride': The number of pixels between adjacent receptive fields in the
         horizontal and vertical directions.
-      - 'pad': The number of pixels that will be used to zero-pad the input. 
+      - 'pad': The number of pixels that will be used to zero-pad the input.
 
 
     During padding, 'pad' zeros should be placed symmetrically (i.e equally on both sides)
@@ -616,7 +616,7 @@ def max_pool_forward_naive(x, pool_param):
       - 'pool_width': The width of each pooling region
       - 'stride': The distance between adjacent pooling regions
 
-    No padding is necessary here. Output size is given by 
+    No padding is necessary here. Output size is given by
 
     Returns a tuple of:
     - out: Output data, of shape (N, C, H', W') where H' and W' are given by
@@ -720,7 +720,10 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     # vanilla version of batch normalization you implemented above.           #
     # Your implementation should be very short; ours is less than five lines. #
     ###########################################################################
-    pass
+    N, C, H, W = x.shape
+    x_reshaped = x.transpose(0, 2, 3, 1).reshape(-1, C)
+    out_reshaped, cache = batchnorm_forward(x_reshaped, gamma, beta, bn_param)
+    out = out_reshaped.reshape(N, H, W, C).transpose(0, 3, 1, 2)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -750,7 +753,10 @@ def spatial_batchnorm_backward(dout, cache):
     # vanilla version of batch normalization you implemented above.           #
     # Your implementation should be very short; ours is less than five lines. #
     ###########################################################################
-    pass
+    N, C, H, W = dout.shape
+    dout_reshaped = dout.transpose(0, 2, 3, 1).reshape(-1, C)
+    dx_reshaped, dgamma, dbeta = batchnorm_backward_alt(dout_reshaped, cache)
+    dx = dx_reshaped.reshape(N, H, W, C).transpose(0, 3, 1, 2)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -761,9 +767,10 @@ def spatial_batchnorm_backward(dout, cache):
 def spatial_groupnorm_forward(x, gamma, beta, G, gn_param):
     """
     Computes the forward pass for spatial group normalization.
-    In contrast to layer normalization, group normalization splits each entry 
+    In contrast to layer normalization, group normalization splits each entry
     in the data into G contiguous pieces, which it then normalizes independently.
-    Per feature shifting and scaling are then applied to the data, in a manner identical to that of batch normalization and layer normalization.
+    Per feature shifting and scaling are then applied to the data,
+    in a manner identical to that of batch normalization and layer normalization.
 
     Inputs:
     - x: Input data of shape (N, C, H, W)
@@ -786,7 +793,31 @@ def spatial_groupnorm_forward(x, gamma, beta, G, gn_param):
     # the bulk of the code is similar to both train-time batch normalization  #
     # and layer normalization!                                                #
     ###########################################################################
-    pass
+
+    # My solution is to first reshape data into shape (N*H*W,C), and then split
+    # them into G groups. For each group in the shape (N*H*W,G), layer normalize
+    # it and get part of our out and cache. And finally, put all the parts together
+    # to get the result.
+    # Quite naive but saves a lot of time to code.
+
+    N, C, H, W = x.shape
+    x_reshaped = x.transpose(0, 2, 3, 1).reshape(-1, C)
+    out = np.zeros_like(x)
+    cache = list()
+    gamma = gamma.reshape((C,))
+    beta = beta.reshape((C,))
+    for i in range(C//G):
+        # print(x_reshaped.shape)
+        x_part = x_reshaped[:, i * G: (i + 1) * G]
+        gamma_part = gamma[i * G: (i + 1) * G]
+        beta_part = beta[i * G: (i + 1) * G]
+        # print(x_part.shape, gamma_part.shape, beta_part.shape)
+        out_part_reshaped, cache_part = layernorm_forward(x_part, gamma_part, beta_part, gn_param)
+        cache.append(cache_part)
+        # print(out_part_reshaped.shape)
+        out_part = out_part_reshaped.reshape(N, H, W, G).transpose(0, 3, 1, 2)
+        out[:, i * G: (i + 1) * G, :, :] = out_part
+    cache.append(G)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -812,7 +843,25 @@ def spatial_groupnorm_backward(dout, cache):
     # TODO: Implement the backward pass for spatial group normalization.      #
     # This will be extremely similar to the layer norm implementation.        #
     ###########################################################################
-    pass
+
+    # Just reverse it.
+
+    N, C, H, W = dout.shape
+    G = cache[-1]
+    dx = np.zeros_like(dout)
+    dgamma = np.zeros((C,))
+    dbeta = np.zeros((C,))
+    dout_reshaped = dout.transpose(0, 2, 3, 1).reshape((-1, C))
+    for i in range(C//G):
+        dout_reshaped_part = dout_reshaped[:, i * G: (i + 1) * G]
+        cache_part = cache[i]
+        dx_part_reshaped, dgamma_part, dbeta_part = layernorm_backward(dout_reshaped_part, cache_part)
+        dgamma[i * G: (i + 1) * G] = dgamma_part
+        dbeta[i * G: (i + 1) * G] = dbeta_part
+        dx_part = dx_part_reshaped.reshape((N, H, W, G)).transpose(0, 3, 1, 2)
+        dx[:, i * G: (i + 1) * G, :, :] = dx_part
+    dgamma = dgamma.reshape((1, C, 1, 1))
+    dbeta = dbeta.reshape((1, C, 1, 1))
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
